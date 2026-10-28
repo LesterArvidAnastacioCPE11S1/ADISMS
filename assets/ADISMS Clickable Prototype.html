@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ADISMS Prototype – Arvid DryGoods</title>
+<style>
+:root{--bg:#f6f5f1;--card:#fff;--tx:#1d2a24;--mu:#6b756f;--ac:#1f6f50;--ac2:#e8f3ee;--wa:#c2410c;--wb:#fdece3;--bd:#e2e0d8;color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#141a17;--card:#1e2723;--tx:#e9eee9;--mu:#9aa79f;--ac:#4cc38a;--ac2:#1c3329;--wa:#fb923c;--wb:#3a2418;--bd:#2c3731;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#141a17;--card:#1e2723;--tx:#e9eee9;--mu:#9aa79f;--ac:#4cc38a;--ac2:#1c3329;--wa:#fb923c;--wb:#3a2418;--bd:#2c3731;color-scheme:dark}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+#app{max-width:440px;margin:0 auto;min-height:100vh;padding:16px 16px 84px}
+h1{font-size:20px;margin:0 0 2px}h2{font-size:15px;margin:18px 0 8px}.mu{color:var(--mu);font-size:13px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:14px;margin-bottom:10px}
+.row{display:flex;align-items:center;justify-content:space-between;gap:8px}
+button,input,select{font:inherit;color:inherit}
+.btn{background:var(--ac);color:#fff;border:0;border-radius:10px;padding:11px 14px;width:100%;font-weight:600;cursor:pointer}
+.btn.s{background:var(--ac2);color:var(--ac)}.btn.w{width:auto}
+input,select{width:100%;padding:11px;border:1px solid var(--bd);border-radius:10px;background:var(--card);margin-bottom:8px}
+.tag{font-size:12px;padding:2px 8px;border-radius:99px;background:var(--ac2);color:var(--ac);font-weight:600}.tag.lo{background:var(--wb);color:var(--wa)}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.q{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:14px;text-align:left;cursor:pointer}
+nav{position:fixed;bottom:0;left:0;right:0;background:var(--card);border-top:1px solid var(--bd);display:flex;justify-content:center;padding-bottom:env(safe-area-inset-bottom,0px)}
+nav div{display:flex;max-width:440px;width:100%}nav button{flex:1;background:none;border:0;padding:10px 2px;font-size:11px;color:var(--mu);cursor:pointer}nav button.on{color:var(--ac);font-weight:700}
+.bars{display:flex;align-items:flex-end;gap:8px;height:110px}.bars div{flex:1;text-align:center;font-size:11px;color:var(--mu)}.bars i{display:block;background:var(--ac);border-radius:5px 5px 0 0;margin-bottom:3px}
+.cam{height:170px;border:2px dashed var(--bd);border-radius:14px;display:flex;align-items:center;justify-content:center;color:var(--mu);margin-bottom:10px;text-align:center}
+.tabs{display:flex;gap:6px;margin-bottom:10px}.tabs button{flex:1;padding:9px;border-radius:10px;border:1px solid var(--bd);background:var(--card);cursor:pointer}.tabs button.on{background:var(--ac);color:#fff;border-color:var(--ac)}
+.toast{position:fixed;top:calc(12px + env(safe-area-inset-top,0px));left:50%;transform:translateX(-50%);background:var(--tx);color:var(--bg);padding:10px 16px;border-radius:10px;z-index:9;max-width:90%}
+a.back{color:var(--ac);cursor:pointer;font-size:13px}
+</style></head><body><div id="app"></div>
+<script>
+var P=[{id:"P001",n:"Lucky Me Pancit Canton",p:18,s:6,r:20,b:"4800016644801"},{id:"P002",n:"Silver Swan Soy Sauce 385ml",p:28,s:34,r:15,b:"4800010001"},{id:"P003",n:"Datu Puti Vinegar 385ml",p:26,s:3,r:15,b:"4800010002"},{id:"P004",n:"Kopiko Brown Coffee 3in1",p:9,s:48,r:30,b:"4800010003"},{id:"P005",n:"Safeguard Soap 85g",p:42,s:12,r:10,b:"4800010004"},{id:"P006",n:"Bear Brand Milk 33g",p:15,s:9,r:20,b:"4800010005"},{id:"P007",n:"Nescafe Classic 25g",p:35,s:22,r:12,b:"4800010006"},{id:"P008",n:"Surf Powder Sachet",p:11,s:60,r:25,b:""}];
+var days=[{d:"Mon",v:3420},{d:"Tue",v:2890},{d:"Wed",v:4105},{d:"Thu",v:3650},{d:"Fri",v:5120},{d:"Sat",v:4780},{d:"Today",v:0}];
+var st={v:"login",pid:null,tab:"barcode",res:null,q:"",user:""};
+var $=function(x){return document.getElementById(x)};
+function peso(n){return "₱"+n.toLocaleString("en-PH")}
+function toast(m){var t=document.createElement("div");t.className="toast";t.textContent=m;document.body.appendChild(t);setTimeout(function(){t.remove()},2200)}
+function go(v,pid){st.v=v;st.pid=pid||null;st.res=null;render()}
+function prod(id){return P.filter(function(x){return x.id===id})[0]}
+function tag(x){return x.s<=x.r?'<span class="tag lo">Low · '+x.s+'</span>':'<span class="tag">'+x.s+' in stock</span>'}
+function opts(){return P.map(function(x){return '<option value="'+x.id+'"'+(x.id===st.pid?" selected":"")+'>'+x.n+' ('+x.s+')</option>'}).join("")}
+function item(x){return '<div class="card row" style="cursor:pointer" onclick="go(\'detail\',\''+x.id+'\')"><div><b>'+x.n+'</b><div class="mu">'+x.id+' · '+peso(x.p)+'</div></div>'+tag(x)+'</div>'}
+var V={
+login:function(){return '<div style="margin-top:12vh"><h1>Arvid DryGoods</h1><p class="mu">Inventory and Sales Management System (ADISMS)</p><div class="card"><input id="u" placeholder="Username" value="owner"><input type="password" placeholder="Password" value="••••••"><select id="role"><option>Owner</option><option>Employee</option></select><button class="btn" onclick="st.user=$(\'role\').value;go(\'dash\')">Log in</button></div><p class="mu">Prototype only – no real data is stored.</p></div>'},
+dash:function(){var t=days[6].v,low=P.slice().sort(function(a,b){return a.s/a.r-b.s/b.r}).slice(0,4),mx=Math.max.apply(null,days.map(function(x){return x.v}))||1;
+return '<h1>Dashboard</h1><div class="mu">Signed in as '+st.user+'</div><div class="grid" style="margin-top:12px"><div class="card"><div class="mu">Sales today</div><b style="font-size:22px">'+peso(t)+'</b></div><div class="card"><div class="mu">Low-stock items</div><b style="font-size:22px">'+P.filter(function(x){return x.s<=x.r}).length+'</b></div></div>'+
+'<h2>Daily sales</h2><div class="card"><div class="bars">'+days.map(function(x){return '<div><i style="height:'+Math.max(3,x.v/mx*90)+'px"></i>'+x.d+'</div>'}).join("")+'</div></div>'+
+'<h2>Stock checker · lowest stock first</h2>'+low.map(item).join("")+
+'<h2>Quick actions</h2><div class="grid"><button class="q" onclick="go(\'scan\')">📷<br><b>Scan / Camera</b></button><button class="q" onclick="go(\'sale\')">🧾<br><b>Record sale</b></button><button class="q" onclick="go(\'deliv\')">🚚<br><b>Receive delivery</b></button><button class="q" onclick="go(\'reg\')">➕<br><b>Register product</b></button></div>'},
+search:function(){var f=P.filter(function(x){return (x.n+x.id).toLowerCase().indexOf(st.q.toLowerCase())>-1});
+return '<h1>Product search</h1><p class="mu">By product name or Product ID</p><input id="q" placeholder="Search…" value="'+st.q+'" oninput="st.q=this.value;var p=this.selectionStart;render();var e=$(\'q\');e.focus();e.setSelectionRange(p,p)">'+(f.length?f.map(item).join(""):'<div class="card">No match found.<br><button class="btn s" style="margin-top:8px" onclick="go(\'reg\')">Register as new product</button></div>')},
+detail:function(){var x=prod(st.pid);return '<a class="back" onclick="go(\'search\')">‹ Back to search</a><h1>'+x.n+'</h1><div class="card"><div class="row"><span class="mu">Product ID</span><b>'+x.id+'</b></div><div class="row"><span class="mu">Price</span><b>'+peso(x.p)+'</b></div><div class="row"><span class="mu">Barcode</span><b>'+(x.b||"none")+'</b></div><div class="row"><span class="mu">Reorder level</span><b>'+x.r+'</b></div><div class="row"><span class="mu">Stock</span>'+tag(x)+'</div></div><div class="grid"><button class="btn" onclick="go(\'sale\',\''+x.id+'\')">Record sale</button><button class="btn s" onclick="go(\'deliv\',\''+x.id+'\')">Receive delivery</button></div>'},
+scan:function(){var r=st.res,b=st.tab==="barcode",out="";
+if(r==="nf")out='<div class="card"><b>Product could not be identified.</b><p class="mu">Try again, search manually, or register it.</p><div class="grid"><button class="btn s" onclick="go(\'search\')">Manual search</button><button class="btn s" onclick="go(\'reg\')">Register</button></div></div>';
+else if(r){var x=prod(r.id);out='<div class="card"><div class="row"><b>'+x.n+'</b>'+tag(x)+'</div><div class="mu">'+x.id+' · '+peso(x.p)+'</div><div class="mu" style="margin:6px 0">'+(b?'Barcode match':'Confidence '+r.c+'%')+' · '+r.t+' s (target ≤ 3 s)</div><div class="grid"><button class="btn" onclick="go(\'sale\',\''+x.id+'\')">Record sale</button><button class="btn s" onclick="go(\'detail\',\''+x.id+'\')">Details</button></div></div>'}
+return '<h1>Scan and camera</h1><div class="tabs"><button class="'+(b?"on":"")+'" onclick="st.tab=\'barcode\';st.res=null;render()">Barcode</button><button class="'+(!b?"on":"")+'" onclick="st.tab=\'image\';st.res=null;render()">Image recognition</button></div><div class="cam">'+(b?'Point camera at barcode':'Place product in frame')+'<br>(simulated)</div><button class="btn" onclick="sim(false)">'+(b?'Simulate scan':'Capture photo')+'</button><button class="btn s" style="margin:8px 0 12px" onclick="sim(true)">Simulate unrecognized product</button>'+out},
+sale:function(){return '<h1>Record sale</h1><div class="card"><select id="sp">'+opts()+'</select><input id="sq" type="number" min="1" value="1"><button class="btn" onclick="tx(-1)">Confirm sale</button></div><p class="mu">New stock = current stock − quantity sold. Sales that would cause negative stock are rejected.</p>'},
+deliv:function(){return '<h1>Receive delivery</h1><div class="card"><select id="sp">'+opts()+'</select><input id="sq" type="number" min="1" value="10"><button class="btn" onclick="tx(1)">Confirm delivery</button></div><p class="mu">New stock = current stock + quantity received.</p>'},
+reg:function(){return '<h1>Register new product</h1><div class="card"><input id="rn" placeholder="Product name"><input id="ri" placeholder="Product ID (e.g. P009)"><input id="rb" placeholder="Barcode (optional)"><input id="rp" type="number" placeholder="Price (PHP)"><input id="rs" type="number" placeholder="Starting quantity"><input id="rr" type="number" placeholder="Reorder level"><button class="btn" onclick="reg()">Save product</button></div>'}};
+function sim(nf){var t=(st.tab==="barcode"?0.4+Math.random()*0.5:1.4+Math.random()*1.2).toFixed(1);if(nf){st.res="nf"}else{var x=P[Math.floor(Math.random()*P.length)];st.res={id:x.id,c:Math.floor(90+Math.random()*9),t:t}}render()}
+function tx(sg){var x=prod($("sp").value),q=parseInt($("sq").value,10);if(!q||q<1)return toast("Enter a valid quantity");
+if(sg<0&&q>x.s)return toast("Rejected: only "+x.s+" in stock");x.s+=sg*q;if(sg<0)days[6].v+=q*x.p;
+toast((sg<0?"Sale":"Delivery")+" recorded · "+x.n+" now "+x.s);go("detail",x.id)}
+function reg(){var n=$("rn").value.trim(),i=$("ri").value.trim();if(!n||!i||prod(i))return toast("Name and a unique Product ID are required");
+P.push({id:i,n:n,p:+$("rp").value||0,s:+$("rs").value||0,r:+$("rr").value||10,b:$("rb").value.trim()});toast("Product registered");go("detail",i)}
+function render(){var v=st.v,h=V[v]();
+if(v!=="login"){var tabs=[["dash","🏠","Home"],["search","🔍","Search"],["scan","📷","Scan"],["sale","🧾","Sales"],["deliv","🚚","Delivery"]];
+h+='<nav><div>'+tabs.map(function(t){return '<button class="'+(v===t[0]?"on":"")+'" onclick="go(\''+t[0]+'\')">'+t[1]+'<br>'+t[2]+'</button>'}).join("")+'</div></nav>'}
+$("app").innerHTML=h}
+render();
+</script></body></html>

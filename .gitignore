@@ -1,0 +1,20 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Runtime data
+adisms.db
+.secret_key
+data/eval/*.json
+data/models/*.pt
+data/products/**/*
+data/test/**/*
+!data/products/.gitkeep
+!data/test/.gitkeep
+!data/models/.gitkeep
+!data/eval/.gitkeep
+
+# OS noise
+.DS_Store
+Thumbs.db

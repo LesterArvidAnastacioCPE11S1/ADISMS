@@ -1,0 +1,10 @@
+Flask>=3.0
+Werkzeug>=3.0
+numpy>=1.26
+opencv-python>=4.9
+Pillow>=10.0
+
+# Alternative C (CNN transfer learning). Heavy download (~200-400 MB).
+# Install these only on the machine that trains or serves the CNN.
+torch>=2.2
+torchvision>=0.17
