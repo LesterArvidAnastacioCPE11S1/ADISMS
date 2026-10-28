@@ -5,6 +5,7 @@ venv/
 
 # Runtime data
 adisms.db
+adisms.db.backup-*
 .secret_key
 data/eval/*.json
 data/models/*.pt

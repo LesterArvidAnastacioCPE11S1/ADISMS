@@ -59,6 +59,11 @@ def _with_image(product):
     return product
 
 
+def _log(action, detail):
+    db.log_activity(get_conn(), action, user_id=session["user_id"], detail=detail,
+                    ip=request.remote_addr)
+
+
 # ---------- dashboard ----------
 @bp.get("/dashboard")
 @login_required
@@ -146,6 +151,7 @@ def upload_product_images(product_id):
 
     if not db.get_product(get_conn(), product_id).get("image_ref"):
         db.set_image_ref(get_conn(), product_id, saved[0])
+    _log("PRODUCT_PHOTO", f"{product_id} · {len(saved)} photo(s)")
     return jsonify(product=_with_image(db.get_product(get_conn(), product_id)), images=saved), 201
 
 
@@ -174,6 +180,7 @@ def register():
         (data.get("barcode") or "").strip() or None,
         session["user_id"],
     )
+    _log("PRODUCT_ADDED", f"{product['name']} ({product['product_id']})")
     return jsonify(_with_image(product)), 201
 
 
@@ -186,6 +193,7 @@ def delete_product(product_id):
         return jsonify(error="Product not found."), 404
     removed = db.delete_product(conn, product_id)
     shutil.rmtree(_image_folder(product_id), ignore_errors=True)
+    _log("PRODUCT_DELETED", f"{removed['name']} ({removed['product_id']})")
     return jsonify(ok=True, product_id=removed["product_id"], name=removed["name"]), 200
 
 
@@ -194,8 +202,10 @@ def delete_product(product_id):
 @login_required
 def sale():
     data = request.get_json(silent=True) or {}
+    quantity = int_field(data, "quantity")
     product = db.record_sale(get_conn(), data.get("product_id"),
-                             int_field(data, "quantity"), session["user_id"])
+                             quantity, session["user_id"])
+    _log("SALE", f"{quantity} × {product['name']}")
     return jsonify(_with_image(product)), 201
 
 
@@ -204,6 +214,8 @@ def sale():
 def sale_cart():
     data = request.get_json(silent=True) or {}
     receipt = db.record_cart_sale(get_conn(), data.get("items"), session["user_id"])
+    _log("SALE", f"{receipt['sale_number']} · {receipt['item_count']} items · "
+                 f"PHP {receipt['total']:.2f}")
     return jsonify(receipt), 201
 
 
@@ -211,10 +223,12 @@ def sale_cart():
 @login_required
 def delivery():
     data = request.get_json(silent=True) or {}
+    quantity = int_field(data, "quantity")
     product = db.record_delivery(get_conn(), data.get("product_id"),
-                                 int_field(data, "quantity"), session["user_id"],
+                                 quantity, session["user_id"],
                                  reference=data.get("reference"),
                                  received_on=data.get("received_on"))
+    _log("DELIVERY", f"+{quantity} {product['name']}")
     return jsonify(_with_image(product)), 201
 
 

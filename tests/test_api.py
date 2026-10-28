@@ -9,7 +9,7 @@ import unittest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app import create_app
-from tests.helpers import build_dataset, image_bytes
+from tests.helpers import build_dataset, image_bytes, seed_products
 
 
 class ApiTests(unittest.TestCase):
@@ -28,6 +28,10 @@ class ApiTests(unittest.TestCase):
             "TESTING": True,
         })
         self.client = self.app.test_client()
+        seed_products(self.app.config["DB_PATH"])
+        self.client.post("/api/register", json={
+            "username": "owner", "email": "owner@example.com",
+            "password": "owner123", "confirm_password": "owner123"})
 
     def tearDown(self):
         shutil.rmtree(self.tmp, ignore_errors=True)

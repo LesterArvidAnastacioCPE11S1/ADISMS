@@ -5,9 +5,39 @@ in the paper; collect real photos of the store's products for that.
 """
 import io
 import random
+import sqlite3
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageEnhance
+
+SAMPLE_PRODUCTS = [
+    ("P001", "Lucky Me Pancit Canton", 18, 6, 20, "4800016644801"),
+    ("P002", "Silver Swan Soy Sauce 385ml", 28, 34, 15, "4800010001"),
+    ("P003", "Datu Puti Vinegar 385ml", 26, 3, 15, "4800010002"),
+    ("P004", "Kopiko Brown Coffee 3in1", 9, 48, 30, "4800010003"),
+    ("P005", "Safeguard Soap 85g", 42, 12, 10, "4800010004"),
+    ("P006", "Bear Brand Milk 33g", 15, 9, 20, "4800010005"),
+    ("P007", "Nescafe Classic 25g", 35, 22, 12, "4800010006"),
+    ("P008", "Surf Powder Sachet", 11, 60, 25, None),
+]
+
+
+def seed_products(target):
+    """Insert test-only sample products; the app itself starts with an empty catalog."""
+    own = not hasattr(target, "execute")
+    conn = sqlite3.connect(str(target)) if own else target
+    try:
+        for pid, name, price, stock, reorder, barcode in SAMPLE_PRODUCTS:
+            conn.execute(
+                "INSERT INTO products(product_id,name,price,stock,reorder_level)"
+                " VALUES (?,?,?,?,?)", (pid, name, price, stock, reorder))
+            if barcode:
+                conn.execute("INSERT INTO barcodes VALUES (?,?)", (barcode, pid))
+        conn.commit()
+    finally:
+        if own:
+            conn.close()
+
 
 PRODUCTS = {
     "P001": {"bg": (178, 34, 34), "accent": (255, 245, 220), "label": "PANCIT"},

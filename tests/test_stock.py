@@ -10,6 +10,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app import create_app
 from app import database as db
+from tests.helpers import seed_products
 
 
 class StockTests(unittest.TestCase):
@@ -18,6 +19,7 @@ class StockTests(unittest.TestCase):
         self.path = os.path.join(self.tmp, "stock.db")
         self.conn = db.connect(self.path)
         db.init_db(self.conn)
+        seed_products(self.conn)
 
     def tearDown(self):
         self.conn.close()
@@ -98,12 +100,18 @@ class ApiStockTests(unittest.TestCase):
             "TESTING": True,
         })
         self.client = self.app.test_client()
+        seed_products(self.app.config["DB_PATH"])
+        self.client.post("/api/register", json={
+            "username": "owner", "email": "owner@example.com",
+            "password": "owner123", "confirm_password": "owner123"})
+        self.client.post("/api/login", json={"username": "owner", "password": "owner123"})
 
     def tearDown(self):
         shutil.rmtree(self.tmp, ignore_errors=True)
 
     def test_requires_login(self):
-        self.assertEqual(self.client.get("/api/dashboard").status_code, 401)
+        anon = self.app.test_client()
+        self.assertEqual(anon.get("/api/dashboard").status_code, 401)
 
     def test_login_sale_dashboard(self):
         self.assertEqual(self.client.post(
@@ -119,6 +127,10 @@ class ApiStockTests(unittest.TestCase):
         self.assertEqual(len(dashboard["daily_sales"]), 7)
 
     def test_delivery_updates_stock(self):
+        self.client.post("/api/staff", json={
+            "username": "employee", "email": "employee@example.com",
+            "password": "employee123", "confirm_password": "employee123"})
+        self.client.post("/api/logout")
         self.client.post("/api/login", json={"username": "employee", "password": "employee123"})
         response = self.client.post("/api/deliveries", json={"product_id": "P003", "quantity": 5})
         self.assertEqual(response.status_code, 201)

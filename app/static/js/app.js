@@ -82,7 +82,7 @@ function toast(message) {
 /* ---------- state ---------- */
 var st = {
   user: null, role: null, email: null, phone: null,
-  authMode: "login",
+  authMode: "login", needsOwner: null, loginUser: "", loginNotice: "",
   cart: [], receipt: null,
   tab: "photo", engine: "auto", engines: [],
   identifyIntent: "detail", identifyBack: "dash", match: null, photoUrl: null,
@@ -132,7 +132,8 @@ function resetState() {
   st.cart = []; st.receipt = null; st.match = null; st.photoUrl = null;
   st.saleQuery = ""; st.saleBrowse = false; st.detailEdit = false;
   st.reportDate = todayISO(); st.deliveryId = null; st.pickIntent = null;
-  st.authMode = "login"; st.prevView = null; st.view = null;
+  st.authMode = "login"; st.needsOwner = null; st.loginUser = ""; st.loginNotice = "";
+  st.prevView = null; st.view = null;
   st.cache = [];
 }
 
@@ -445,54 +446,11 @@ function openManualSearch() {
 /* ---------- views ---------- */
 var V = {};
 
-V.login = function () {
+V.login = async function () {
+  var setup = { needs_owner: false };
+  try { setup = await api("/api/setup"); } catch (e) { /* sign-in still works */ }
+  st.needsOwner = !!setup.needs_owner;
   var signup = st.authMode === "signup";
-  if (signup) {
-    render(
-      '<div class="brand"><span class="logo">' + icon("store") + '</span>' +
-      '<div><h1>Arvid DryGoods</h1><p>Mansalay, Oriental Mindoro</p></div></div>' +
-      '<h2 class="login-title" style="font-size:34px">Create your account.</h2>' +
-      '<p class="login-lead">Staff accounts can record sales and deliveries. Ask the store owner if you need help.</p>' +
-      '<form id="signupForm" novalidate>' +
-      '<label class="field"><span>Username</span><input id="ru" maxlength="32" autocomplete="username" placeholder="3-32 characters"></label>' +
-      '<label class="field"><span>Email address</span><input id="re" type="email" autocomplete="email" placeholder="you@example.com">' +
-      '<span class="hint">Required. You can sign in with your email or username.</span></label>' +
-      '<label class="field"><span>Phone number (optional)</span><input id="rph" type="tel" autocomplete="tel" placeholder="e.g. 0917 123 4567"></label>' +
-      '<label class="field"><span>Password</span><div class="inputwrap"><input id="rp" type="password" autocomplete="new-password" placeholder="At least 8 characters">' +
-      '<button type="button" class="peek" id="peekSignup" aria-label="Show password">' + icon("eye") + '</button></div></label>' +
-      '<label class="field"><span>Confirm password</span><input id="rc" type="password" autocomplete="new-password"></label>' +
-      '<div class="err" id="e"></div>' +
-      '<button class="btn" type="submit">' + icon("arrowright") + 'Create account</button>' +
-      '</form>' +
-      '<div class="login-contact">Already have an account?<br>' +
-      '<button class="link" id="toLogin">Log in</button></div>' +
-      '<p class="login-foot">ADISMS \u00B7 Inventory &amp; Sales Management</p>', {});
-  } else {
-    render(
-      '<div class="brand"><span class="logo">' + icon("store") + '</span>' +
-      '<div><h1>Arvid DryGoods</h1><p>Mansalay, Oriental Mindoro</p></div></div>' +
-      '<div class="hero-ill">' + storeArt() + '</div>' +
-      '<h2 class="login-title">Welcome back.</h2>' +
-      '<p class="login-lead">Your store, in good order. Sign in to manage inventory and sales.</p>' +
-      '<form id="loginForm" novalidate>' +
-      '<label class="field"><span>Username or email</span><div class="inputwrap">' +
-      '<input id="lu" autocomplete="username" placeholder="Enter your staff account">' +
-      '<span class="peek">' + icon("user") + '</span></div></label>' +
-      '<label class="field"><span>Password</span><div class="inputwrap">' +
-      '<input id="lp" type="password" autocomplete="current-password" placeholder="Enter your password">' +
-      '<button type="button" class="peek" id="peek" aria-label="Show password">' + icon("eye") + '</button></div></label>' +
-      '<div class="forgot-row"><button type="button" class="link" id="forgot">Forgot password?</button></div>' +
-      '<div class="err" id="e"></div>' +
-      '<button class="btn" type="submit">' + icon("arrowright") + 'Sign in</button>' +
-      '</form>' +
-      '<div class="safety">' + icon("lock") +
-      '<div>For authorized owners and employees only. Use your own staff account.</div></div>' +
-      '<p class="login-foot">ADISMS \u00B7 Inventory &amp; Sales Management</p>' +
-      '<div class="login-contact">Need an account or help signing in?<br>' +
-      '<button class="link" id="toSignup">Create a staff account</button>' +
-      '<span class="muted"> \u00B7 </span>' +
-      '<button class="link" id="help">Contact the store owner</button></div>', {});
-  }
 
   function bindPeek(btnId, inputId) {
     var btn = $(btnId);
@@ -505,7 +463,33 @@ V.login = function () {
     };
   }
 
+  var brandHtml =
+    '<div class="brand"><span class="logo">' + icon("store") + '</span>' +
+    '<div><h1>Arvid DryGoods</h1><p>Mansalay, Oriental Mindoro</p></div></div>';
+
   if (signup) {
+    var ownerExistsHtml = st.needsOwner ? "" :
+      '<div class="notice amber">' + icon("lock") +
+      '<div><b>An owner account already exists.</b> Sign in instead, or ask the owner to add you under Settings \u203A Staff accounts.</div></div>';
+    render(
+      brandHtml +
+      '<h2 class="login-title" style="font-size:34px">Create the owner account.</h2>' +
+      '<p class="login-lead">This account owns the store. You can add staff accounts after signing in.</p>' +
+      ownerExistsHtml +
+      '<form id="signupForm" novalidate>' +
+      '<label class="field"><span>Username</span><input id="ru" maxlength="32" autocomplete="username" placeholder="3-32 characters"></label>' +
+      '<label class="field"><span>Email address</span><input id="re" type="email" autocomplete="email" placeholder="you@example.com">' +
+      '<span class="hint">Required. You can sign in with your email or username.</span></label>' +
+      '<label class="field"><span>Phone number (optional)</span><input id="rph" type="tel" autocomplete="tel" placeholder="e.g. 0917 123 4567"></label>' +
+      '<label class="field"><span>Password</span><div class="inputwrap"><input id="rp" type="password" autocomplete="new-password" placeholder="At least 8 characters">' +
+      '<button type="button" class="peek" id="peekSignup" aria-label="Show password">' + icon("eye") + '</button></div></label>' +
+      '<label class="field"><span>Confirm password</span><input id="rc" type="password" autocomplete="new-password"></label>' +
+      '<div class="err" id="e"></div>' +
+      '<button class="btn" type="submit">' + icon("arrowright") + 'Create owner account</button>' +
+      '</form>' +
+      '<div class="login-contact">Already set up?<br>' +
+      '<button class="link" id="toLogin">Log in</button></div>' +
+      '<p class="login-foot">ADISMS \u00B7 Inventory &amp; Sales Management</p>', {});
     bindPeek("peekSignup", "rp");
     $("toLogin").onclick = function () { st.authMode = "login"; go("login"); };
     $("signupForm").onsubmit = async function (event) {
@@ -528,10 +512,12 @@ V.login = function () {
       var btn = $("signupForm").querySelector(".btn");
       btn.disabled = true;
       try {
-        applyUser(await api("/api/register", "POST", payload));
+        await api("/api/register", "POST", payload);
+        st.needsOwner = false;
         st.authMode = "login";
-        toast("Account created");
-        go("dash");
+        st.loginUser = payload.username;
+        st.loginNotice = "Owner account created. Sign in with your new account.";
+        go("login");
       } catch (err) {
         $("e").textContent = err.message;
         btn.disabled = false;
@@ -540,9 +526,42 @@ V.login = function () {
     return;
   }
 
+  var noticeHtml = "";
+  if (st.loginNotice) {
+    noticeHtml = '<div class="notice">' + icon("check") + '<div>' + esc(st.loginNotice) + '</div></div>';
+  } else if (st.needsOwner) {
+    noticeHtml = '<div class="notice amber">' + icon("shield") +
+      '<div><b>No owner account yet.</b> Create the owner account first, then sign in.</div></div>';
+  }
+
+  render(
+    brandHtml +
+    '<div class="hero-ill">' + storeArt() + '</div>' +
+    '<h2 class="login-title">Welcome back.</h2>' +
+    '<p class="login-lead">Your store, in good order. Sign in to manage inventory and sales.</p>' +
+    noticeHtml +
+    '<form id="loginForm" novalidate>' +
+    '<label class="field"><span>Username or email</span><div class="inputwrap">' +
+    '<input id="lu" autocomplete="username" placeholder="Enter your staff account" value="' + esc(st.loginUser) + '">' +
+    '<span class="peek">' + icon("user") + '</span></div></label>' +
+    '<label class="field"><span>Password</span><div class="inputwrap">' +
+    '<input id="lp" type="password" autocomplete="current-password" placeholder="Enter your password">' +
+    '<button type="button" class="peek" id="peek" aria-label="Show password">' + icon("eye") + '</button></div></label>' +
+    '<div class="forgot-row"><button type="button" class="link" id="forgot">Forgot password?</button></div>' +
+    '<div class="err" id="e"></div>' +
+    '<button class="btn" type="submit">' + icon("arrowright") + 'Sign in</button>' +
+    '</form>' +
+    '<div class="safety">' + icon("lock") +
+    '<div>For authorized owners and employees only. Use your own staff account.</div></div>' +
+    '<p class="login-foot">ADISMS \u00B7 Inventory &amp; Sales Management</p>' +
+    '<div class="login-contact">New store?<br>' +
+    '<button class="link" id="toSignup">Create the owner account</button></div>' +
+    '<div class="login-contact" style="border-top:0;margin-top:8px;padding-top:0">Staff accounts are created by the store owner.<br>' +
+    '<button class="link" id="help">Contact the store owner</button></div>', {});
+
   bindPeek("peek", "lp");
-  $("toSignup").onclick = function () { st.authMode = "signup"; go("login"); };
-  $("help").onclick = function () { toast("Ask the store owner to help with your account."); };
+  $("toSignup").onclick = function () { st.authMode = "signup"; st.loginNotice = ""; go("login"); };
+  $("help").onclick = function () { toast("Ask the store owner to create or help with your account."); };
   $("forgot").onclick = function () { toast("Password resets are handled by the store owner."); };
   $("loginForm").onsubmit = async function (event) {
     event.preventDefault();
@@ -556,6 +575,7 @@ V.login = function () {
     btn.disabled = true;
     try {
       applyUser(await api("/api/login", "POST", { username: identifier, password: password }));
+      st.loginUser = ""; st.loginNotice = "";
       toast("Welcome back, " + cap(st.user));
       go("dash");
     } catch (err) {
@@ -1477,11 +1497,25 @@ V.register = function () {
 V.settings = async function () {
   var d = await api("/api/settings");
   applyUser(d);
+  var ownerHtml = d.role === "Owner"
+    ? '<div class="settings-sec">Management</div>' +
+      '<button class="staff-link" id="openStaff">' +
+      '<span class="mini-avatar">' + icon("user") + '</span>' +
+      '<span class="item-main"><b>Staff accounts</b>' +
+      '<span>Create employee accounts and review their activity</span></span>' +
+      icon("chevright") + '</button>' +
+      '<button class="staff-link" id="openLogs">' +
+      '<span class="mini-avatar">' + icon("clock") + '</span>' +
+      '<span class="item-main"><b>Activity log</b>' +
+      '<span>Sign-ins, sales, deliveries and product changes</span></span>' +
+      icon("chevright") + '</button>'
+    : "";
   render(
     topbar("Settings", "dash") +
     '<div class="card account-card"><span class="account-avatar">' + icon("user") + '</span>' +
     '<div class="item-main"><b>' + esc(d.username) + '</b>' +
     '<span>' + esc(d.role) + ' \u00B7 Staff account</span></div></div>' +
+    ownerHtml +
     '<div class="settings-sec">Contact details</div>' +
     '<div class="card"><form id="contactForm" novalidate>' +
     '<label class="field"><span>Email address</span>' +
@@ -1505,6 +1539,8 @@ V.settings = async function () {
     '<button class="btn danger" id="logout">' + icon("logout") + 'Log out</button>' +
     '<p class="footnote">ADISMS \u00B7 Arvid DryGoods</p>',
     {});
+  if ($("openStaff")) $("openStaff").onclick = function () { go("staff"); };
+  if ($("openLogs")) $("openLogs").onclick = function () { go("logs"); };
 
   $("contactForm").onsubmit = async function (event) {
     event.preventDefault();
@@ -1559,6 +1595,179 @@ V.settings = async function () {
     toast("Signed out");
     go("login");
   };
+};
+
+V.staff = async function () {
+  if (st.role !== "Owner") {
+    render(topbar("Staff accounts", "settings") +
+      '<div class="empty"><b>Owners only</b>Staff accounts can only be managed by the owner.</div>', {});
+    return;
+  }
+
+  var d = await api("/api/staff");
+  var owners = (d.staff || []).filter(function (u) { return u.role === "Owner"; });
+  var staff = (d.staff || []).filter(function (u) { return u.role === "Employee"; });
+  var activity = d.activity || [];
+
+  var staffRows = owners.concat(staff).map(function (u) {
+    var owner = u.role === "Owner";
+    var meta = esc(u.email || "No email");
+    if (u.phone) meta += " \u00B7 " + esc(u.phone);
+    var usage = owner
+      ? "Full management access"
+      : (u.actions || 0) + (u.actions === 1 ? " recorded action" : " recorded actions") +
+        " \u00B7 Last active " + (u.last_active ? relDay(u.last_active) : "never");
+    return '<div class="staff-row">' +
+      '<span class="mini-avatar">' + icon(owner ? "shield" : "user") + '</span>' +
+      '<div class="item-main"><div class="item-name">' + esc(u.username) + '</div>' +
+      '<div class="item-meta">' + meta + '</div>' +
+      '<div class="item-meta">' + usage + '</div></div>' +
+      '<span class="pill' + (owner ? "" : " line") + '">' + (owner ? "Owner" : "Staff") + '</span>' +
+      '</div>';
+  }).join("");
+
+  var activityRows = activity.length ? activity.map(function (m) {
+    var label = m.type === "SALE" ? "Sale" : m.type === "DELIVERY" ? "Delivery" : "Product registered";
+    var who = m.username ? m.username : "system";
+    return '<div class="movement"><span class="tile ' + (m.type === "SALE" ? "amber" : "green") + '">' +
+      icon(m.type === "SALE" ? "arrup" : m.type === "DELIVERY" ? "arrdown" : "box") + '</span>' +
+      '<div class="item-main"><div class="item-name" style="font-size:14.5px">' + esc(m.product_name) + '</div>' +
+      '<div class="item-meta">' + label + ' \u00B7 ' + esc(who) + ' \u00B7 ' +
+      relDay(m.created_at) + ', ' + timeOf(m.created_at) + '</div></div>' +
+      '<span class="qty' + (m.qty_change < 0 ? " neg" : "") + '">' +
+      (m.qty_change > 0 ? "+" : "\u2212") + Math.abs(m.qty_change) + '</span></div>';
+  }).join("") : '<div class="empty">No staff activity yet.</div>';
+
+  render(
+    topbar("Staff accounts", "settings", null, "Owner only") +
+    '<div class="card account-card"><span class="account-avatar">' + icon("shield") + '</span>' +
+    '<div class="item-main"><b>' + staff.length + (staff.length === 1 ? " staff account" : " staff accounts") + '</b>' +
+    '<span>Only the owner can create accounts and see this log.</span></div></div>' +
+    '<div class="settings-sec">Accounts</div>' +
+    '<div class="card">' + staffRows + '</div>' +
+    '<button class="staff-link" id="openLogs">' +
+    '<span class="mini-avatar">' + icon("clock") + '</span>' +
+    '<span class="item-main"><b>Activity log</b>' +
+    '<span>See every sign-in, sale, delivery and product change</span></span>' +
+    icon("chevright") + '</button>' +
+    '<div class="settings-sec">Add a staff account</div>' +
+    '<div class="card"><form id="staffForm" novalidate>' +
+    '<label class="field"><span>Username</span><input id="su" maxlength="32" autocomplete="off" placeholder="3-32 characters"></label>' +
+    '<label class="field"><span>Email address</span><input id="se" type="email" autocomplete="off" placeholder="staff@example.com">' +
+    '<span class="hint">They can sign in with this email or their username.</span></label>' +
+    '<label class="field"><span>Phone number (optional)</span><input id="sph" type="tel" autocomplete="off" placeholder="e.g. 0917 123 4567"></label>' +
+    '<label class="field"><span>Password</span><input id="sp" type="password" autocomplete="new-password" placeholder="At least 8 characters"></label>' +
+    '<label class="field"><span>Confirm password</span><input id="sc" type="password" autocomplete="new-password"></label>' +
+    '<div class="err" id="staffErr"></div>' +
+    '<button class="btn" type="submit">' + icon("plus") + 'Create staff account</button>' +
+    '</form></div>' +
+    '<div class="settings-sec">Recent staff activity</div>' +
+    '<div class="card">' + activityRows + '</div>' +
+    '<p class="footnote">New accounts are employees. They can record sales and deliveries, but only the owner can manage products, staff and reports.</p>',
+    {});
+
+  $("staffForm").onsubmit = async function (event) {
+    event.preventDefault();
+    var payload = {
+      username: $("su").value.trim(),
+      email: $("se").value.trim(),
+      phone: $("sph").value.trim(),
+      password: $("sp").value,
+      confirm_password: $("sc").value
+    };
+    if (!payload.username || !payload.email || !payload.password) {
+      $("staffErr").textContent = "Username, email and password are required.";
+      return;
+    }
+    if (payload.password !== payload.confirm_password) {
+      $("staffErr").textContent = "Passwords do not match.";
+      return;
+    }
+    var btn = $("staffForm").querySelector(".btn");
+    btn.disabled = true;
+    try {
+      var created = await api("/api/staff", "POST", payload);
+      toast("Account created for " + created.username);
+      await V.staff();
+    } catch (err) {
+      $("staffErr").textContent = err.message;
+      btn.disabled = false;
+    }
+  };
+
+  $("openLogs").onclick = function () { go("logs"); };
+};
+
+var LOG_ACTIONS = {
+  OWNER_SETUP: { label: "Owner account created", cat: "account", icon: "shield", tone: "green" },
+  STAFF_CREATED: { label: "Staff account created", cat: "account", icon: "user", tone: "green" },
+  LOGIN: { label: "Signed in", cat: "auth", icon: "lock", tone: "green" },
+  LOGIN_FAILED: { label: "Failed sign-in", cat: "auth", icon: "alert", tone: "red" },
+  LOGOUT: { label: "Signed out", cat: "auth", icon: "logout", tone: "neutral" },
+  SALE: { label: "Sale recorded", cat: "sales", icon: "receipt", tone: "amber" },
+  DELIVERY: { label: "Delivery received", cat: "stock", icon: "arrdown", tone: "green" },
+  PRODUCT_ADDED: { label: "Product added", cat: "stock", icon: "boxplus", tone: "green" },
+  PRODUCT_DELETED: { label: "Product removed", cat: "stock", icon: "trash", tone: "red" },
+  PRODUCT_PHOTO: { label: "Product photo added", cat: "stock", icon: "camera", tone: "neutral" },
+  SETTINGS_UPDATED: { label: "Contact details updated", cat: "account", icon: "edit", tone: "neutral" },
+  PASSWORD_CHANGED: { label: "Password changed", cat: "account", icon: "lock", tone: "amber" }
+};
+
+function logMeta(action) {
+  return LOG_ACTIONS[action] || { label: action, cat: "other", icon: "info", tone: "neutral" };
+}
+
+V.logs = async function (params) {
+  params = params || {};
+  if (st.role !== "Owner") {
+    render(topbar("Activity log", "settings") +
+      '<div class="empty"><b>Owners only</b>Only the owner can view the activity log.</div>', {});
+    return;
+  }
+
+  var filter = params.filter || "all";
+  var d = await api("/api/staff/logs?limit=200");
+  var all = d.entries || [];
+  var entries = all.filter(function (entry) {
+    return filter === "all" || logMeta(entry.action).cat === filter;
+  });
+
+  var chips = [["all", "All"], ["auth", "Sign-ins"], ["sales", "Sales"],
+    ["stock", "Stock"], ["account", "Accounts"]].map(function (pair) {
+    return '<button class="chip' + (filter === pair[0] ? " on" : "") +
+      '" data-log-filter="' + pair[0] + '">' + pair[1] + '</button>';
+  }).join("");
+
+  var rows = entries.length ? entries.map(function (entry) {
+    var meta = logMeta(entry.action);
+    var who = entry.username
+      ? esc(entry.username) + (entry.role ? " \u00B7 " + esc(entry.role) : "")
+      : "Unknown account";
+    return '<div class="movement log-row"><span class="tile ' + meta.tone + '">' +
+      icon(meta.icon) + '</span>' +
+      '<div class="item-main"><div class="item-name" style="font-size:14.5px">' +
+      esc(meta.label) + '</div>' +
+      (entry.detail ? '<div class="item-meta">' + esc(entry.detail) + '</div>' : '') +
+      '<div class="item-meta">' + who + ' \u00B7 ' + relDay(entry.created_at) + ', ' +
+      timeOf(entry.created_at) + '</div></div></div>';
+  }).join("") : '<div class="empty"><b>Nothing here yet</b>' +
+    (filter === "all" ? "Activity appears here as the store is used."
+      : "No entries match this filter.") + '</div>';
+
+  render(
+    topbar("Activity log", "staff", null, "Owner only") +
+    '<div class="card account-card"><span class="account-avatar">' + icon("clock") + '</span>' +
+    '<div class="item-main"><b>' + entries.length + ' recent ' +
+    (entries.length === 1 ? "event" : "events") + '</b>' +
+    '<span>Only the owner can see who signed in and what changed.</span></div></div>' +
+    '<div class="chip-row">' + chips + '</div>' +
+    '<div class="card">' + rows + '</div>' +
+    '<p class="footnote">Showing the latest 200 events, including failed sign-ins.</p>',
+    {});
+
+  Array.prototype.forEach.call(document.querySelectorAll("[data-log-filter]"), function (btn) {
+    btn.onclick = function () { go("logs", { filter: btn.getAttribute("data-log-filter") }); };
+  });
 };
 
 /* ---------- navigation ---------- */
@@ -1659,9 +1868,22 @@ document.addEventListener("click", function (event) {
   }
 });
 
-api("/api/me").then(function (user) {
-  applyUser(user);
-  go("dash");
-}).catch(function () {
-  go("login");
-});
+async function boot() {
+  try {
+    var setup = await api("/api/setup");
+    if (setup.needs_owner) {
+      resetState();
+      st.needsOwner = true;
+      go("login");
+      return;
+    }
+  } catch (e) { /* fall back to the session check */ }
+  api("/api/me").then(function (user) {
+    applyUser(user);
+    go("dash");
+  }).catch(function () {
+    go("login");
+  });
+}
+
+boot();

@@ -2,7 +2,7 @@
 import re
 from functools import wraps
 
-from flask import Blueprint, jsonify, request, session
+from flask import Blueprint, current_app, jsonify, request, session
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from . import database as db
@@ -91,17 +91,69 @@ def _current_user():
     return user
 
 
+def _log(conn, action, user=None, detail=None, identifier=None):
+    db.log_activity(conn, action,
+                    user_id=user["id"] if user is not None else None,
+                    username=user["username"] if user is not None else identifier,
+                    role=user["role"] if user is not None else None,
+                    detail=detail, ip=request.remote_addr)
+
+
 # ---------- endpoints ----------
+@bp.get("/api/setup")
+def setup_state():
+    """Public: tells the sign-in screen whether the Owner account exists yet."""
+    return jsonify(needs_owner=not db.has_owner(get_conn()))
+
+
 @bp.post("/api/register")
 def register():
+    """First-run owner sign-up. The new owner must then sign in separately."""
     data = request.get_json(silent=True) or {}
     username = _clean_username(data.get("username"))
     email = _clean_email(data.get("email"))
     phone = _clean_phone(data.get("phone"))
     password = _clean_password(data.get("password"), data.get("confirm_password"))
-    user = db.create_user(get_conn(), username, email, password, phone)
-    _sign_in(user)
+    user = db.create_owner(get_conn(), username, email, password, phone)
+    _log(get_conn(), "OWNER_SETUP", user=user, detail=email)
     return jsonify(_account(user)), 201
+
+
+@bp.get("/api/staff")
+@login_required
+@role_required("Owner")
+def list_staff():
+    return jsonify(db.staff_overview(get_conn(),
+                                     activity_limit=current_app.config["STAFF_ACTIVITY_LIMIT"]))
+
+
+@bp.post("/api/staff")
+@login_required
+@role_required("Owner")
+def create_staff():
+    data = request.get_json(silent=True) or {}
+    username = _clean_username(data.get("username"))
+    email = _clean_email(data.get("email"))
+    phone = _clean_phone(data.get("phone"))
+    password = _clean_password(data.get("password"), data.get("confirm_password"))
+    conn = get_conn()
+    user = db.create_user(conn, username, email, password, phone, role="Employee")
+    _log(conn, "STAFF_CREATED", user=db.get_user(conn, session["user_id"]),
+         detail="@" + user["username"])
+    return jsonify(_account(user)), 201
+
+
+@bp.get("/api/staff/logs")
+@login_required
+@role_required("Owner")
+def staff_logs():
+    """Owner-only audit trail of sign-ins, sales, stock and account changes."""
+    try:
+        limit = max(1, min(200, int(request.args.get("limit", 100))))
+    except (TypeError, ValueError):
+        limit = 100
+    action = (request.args.get("action") or "").strip().upper() or None
+    return jsonify(entries=db.activity_entries(get_conn(), limit=limit, action=action))
 
 
 @bp.post("/api/login")
@@ -111,15 +163,26 @@ def login():
     password = data.get("password") if isinstance(data.get("password"), str) else ""
     if not identifier or not password:
         return jsonify(error="Enter your username or email and your password."), 400
-    user = db.find_user_for_login(get_conn(), identifier)
-    if user is None or not check_password_hash(user["password_hash"], password):
+    conn = get_conn()
+    user = db.find_user_for_login(conn, identifier)
+    if user is None:
+        _log(conn, "LOGIN_FAILED", identifier=identifier[:120],
+             detail="Unknown username or email")
+        return jsonify(error="Invalid username/email or password."), 401
+    if not check_password_hash(user["password_hash"], password):
+        _log(conn, "LOGIN_FAILED", user=user, detail="Wrong password")
         return jsonify(error="Invalid username/email or password."), 401
     _sign_in(user)
+    _log(conn, "LOGIN", user=user)
     return jsonify(_account(user))
 
 
 @bp.post("/api/logout")
 def logout():
+    if session.get("user_id"):
+        db.log_activity(get_conn(), "LOGOUT", user_id=session["user_id"],
+                        username=session.get("username"), role=session.get("role"),
+                        ip=request.remote_addr)
     session.clear()
     return jsonify(ok=True)
 
@@ -150,6 +213,7 @@ def update_settings():
     email = _clean_email(data.get("email"))
     phone = _clean_phone(data.get("phone"))
     user = db.update_user_contact(get_conn(), session["user_id"], email, phone)
+    _log(get_conn(), "SETTINGS_UPDATED", user=user, detail="Contact details updated")
     return jsonify(_account(user))
 
 
@@ -169,4 +233,5 @@ def change_password():
     if check_password_hash(row["password_hash"], new_password):
         return jsonify(error="Choose a password different from your current one."), 400
     db.update_password(get_conn(), row["id"], generate_password_hash(new_password))
+    _log(get_conn(), "PASSWORD_CHANGED", user=db.get_user(get_conn(), row["id"]))
     return jsonify(ok=True)

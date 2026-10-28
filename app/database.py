@@ -69,24 +69,24 @@ CREATE TABLE IF NOT EXISTS inventory_transactions (
     created_at TEXT NOT NULL,
     user_id INTEGER REFERENCES users(id)
 );
+CREATE TABLE IF NOT EXISTS activity_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    created_at TEXT NOT NULL,
+    user_id INTEGER REFERENCES users(id),
+    username TEXT,
+    role TEXT,
+    action TEXT NOT NULL,
+    detail TEXT,
+    ip TEXT
+);
 CREATE INDEX IF NOT EXISTS idx_batches_created ON sales_batches(created_at);
 CREATE INDEX IF NOT EXISTS idx_sales_created ON sales(created_at);
 CREATE INDEX IF NOT EXISTS idx_deliveries_created ON deliveries(created_at);
 CREATE INDEX IF NOT EXISTS idx_tx_product ON inventory_transactions(product_id);
 CREATE INDEX IF NOT EXISTS idx_tx_created ON inventory_transactions(created_at);
+CREATE INDEX IF NOT EXISTS idx_activity_created ON activity_log(created_at);
+CREATE INDEX IF NOT EXISTS idx_activity_user ON activity_log(user_id);
 """
-
-# Sample products from the clickable prototype (mock data, not real store data).
-SEED_PRODUCTS = [
-    ("P001", "Lucky Me Pancit Canton", 18, 6, 20, "4800016644801"),
-    ("P002", "Silver Swan Soy Sauce 385ml", 28, 34, 15, "4800010001"),
-    ("P003", "Datu Puti Vinegar 385ml", 26, 3, 15, "4800010002"),
-    ("P004", "Kopiko Brown Coffee 3in1", 9, 48, 30, "4800010003"),
-    ("P005", "Safeguard Soap 85g", 42, 12, 10, "4800010004"),
-    ("P006", "Bear Brand Milk 33g", 15, 9, 20, "4800010005"),
-    ("P007", "Nescafe Classic 25g", 35, 22, 12, "4800010006"),
-    ("P008", "Surf Powder Sachet", 11, 60, 25, None),
-]
 
 
 class StockError(ValueError):
@@ -111,10 +111,6 @@ def _migrate(conn):
         if column not in columns:
             conn.execute(f"ALTER TABLE users ADD COLUMN {column} TEXT")
     conn.execute("UPDATE users SET created_at=? WHERE created_at IS NULL", (now(),))
-    conn.execute("UPDATE users SET email='owner@arviddrygoods.local' "
-                 "WHERE username='owner' AND (email IS NULL OR email='')")
-    conn.execute("UPDATE users SET email='employee@arviddrygoods.local' "
-                 "WHERE username='employee' AND (email IS NULL OR email='')")
     conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email "
                  "ON users(email COLLATE NOCASE) WHERE email IS NOT NULL")
 
@@ -140,23 +136,9 @@ def _backfill_sale_batches(conn):
         conn.execute("UPDATE sales SET batch_id=? WHERE id=?", (cur.lastrowid, row["id"]))
 
 
-def init_db(conn, seed=True):
+def init_db(conn):
     conn.executescript(SCHEMA)
     _migrate(conn)
-    if seed and conn.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 0:
-        conn.execute("INSERT INTO users(username,email,phone,password_hash,role,created_at)"
-                     " VALUES (?,?,?,?,?,?)",
-                     ("owner", "owner@arviddrygoods.local", None,
-                      generate_password_hash("owner123"), "Owner", now()))
-        conn.execute("INSERT INTO users(username,email,phone,password_hash,role,created_at)"
-                     " VALUES (?,?,?,?,?,?)",
-                     ("employee", "employee@arviddrygoods.local", None,
-                      generate_password_hash("employee123"), "Employee", now()))
-        for pid, name, price, stock, reorder, barcode in SEED_PRODUCTS:
-            conn.execute("INSERT INTO products(product_id,name,price,stock,reorder_level) VALUES (?,?,?,?,?)",
-                         (pid, name, price, stock, reorder))
-            if barcode:
-                conn.execute("INSERT INTO barcodes VALUES (?,?)", (barcode, pid))
 
 
 # ---------- accounts ----------
@@ -178,13 +160,19 @@ def find_user_for_login(conn, identifier):
         (identifier, identifier)).fetchone()
 
 
-def create_user(conn, username, email, password, phone=None):
+def has_owner(conn):
+    return conn.execute("SELECT 1 FROM users WHERE role='Owner' LIMIT 1").fetchone() is not None
+
+
+def _insert_user(conn, username, email, password, phone, role, require_no_owner=False):
     username, email = (username or "").strip(), (email or "").strip().lower()
     phone = (phone or "").strip() or None
     if not username or not email or not password:
         raise StockError("Username, email and password are required.")
     conn.execute("BEGIN IMMEDIATE")
     try:
+        if require_no_owner and has_owner(conn):
+            raise StockError("An owner account already exists. Sign in instead.")
         if conn.execute("SELECT 1 FROM users WHERE username=? COLLATE NOCASE",
                         (username,)).fetchone():
             raise StockError("That username is already taken.")
@@ -193,13 +181,74 @@ def create_user(conn, username, email, password, phone=None):
         conn.execute(
             "INSERT INTO users(username,email,phone,password_hash,role,created_at)"
             " VALUES (?,?,?,?,?,?)",
-            (username, email, phone, generate_password_hash(password), "Employee", now()))
+            (username, email, phone, generate_password_hash(password), role, now()))
         user_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
         conn.execute("COMMIT")
     except Exception:
         conn.execute("ROLLBACK")
         raise
     return get_user(conn, user_id)
+
+
+def create_owner(conn, username, email, password, phone=None):
+    """First-run sign-up: only succeeds while no Owner account exists."""
+    return _insert_user(conn, username, email, password, phone, "Owner", require_no_owner=True)
+
+
+def create_user(conn, username, email, password, phone=None, role="Employee"):
+    if role not in ("Owner", "Employee"):
+        raise StockError("Unknown account role.")
+    return _insert_user(conn, username, email, password, phone, role)
+
+
+def staff_overview(conn, activity_limit=12):
+    """All staff accounts plus their stock activity for the owner's staff screen."""
+    staff = []
+    for row in conn.execute("SELECT * FROM users ORDER BY role='Owner' DESC, created_at, id"):
+        actions, last_active = 0, None
+        if row["role"] == "Employee":
+            summary = conn.execute(
+                "SELECT COUNT(*) AS actions, MAX(created_at) AS last_active "
+                "FROM inventory_transactions WHERE user_id=?", (row["id"],)).fetchone()
+            actions, last_active = summary["actions"], summary["last_active"]
+        staff.append({**_user(row), "actions": actions, "last_active": last_active})
+    activity = conn.execute(
+        "SELECT t.id, t.type, t.qty_change, t.created_at, p.name AS product_name,"
+        " u.username, u.role, u.id AS user_id"
+        " FROM inventory_transactions t"
+        " JOIN products p ON p.product_id = t.product_id"
+        " LEFT JOIN users u ON u.id = t.user_id"
+        " ORDER BY t.id DESC LIMIT ?", (activity_limit,)).fetchall()
+    return {
+        "staff": staff,
+        "activity": [{key: row[key] for key in row.keys()} for row in activity],
+    }
+
+
+# ---------- activity log ----------
+def log_activity(conn, action, user_id=None, username=None, role=None, detail=None, ip=None):
+    """Append an audit entry; username/role are copied so it survives account changes."""
+    if user_id is not None and (username is None or role is None):
+        row = conn.execute("SELECT username, role FROM users WHERE id=?", (user_id,)).fetchone()
+        if row is not None:
+            username = username or row["username"]
+            role = role or row["role"]
+    conn.execute(
+        "INSERT INTO activity_log(created_at,user_id,username,role,action,detail,ip)"
+        " VALUES (?,?,?,?,?,?,?)",
+        (now(), user_id, username, role, action, detail, ip))
+
+
+def activity_entries(conn, limit=100, action=None):
+    sql = ("SELECT id, created_at, user_id, username, role, action, detail, ip"
+           " FROM activity_log")
+    params = []
+    if action:
+        sql += " WHERE action=?"
+        params.append(action)
+    sql += " ORDER BY id DESC LIMIT ?"
+    params.append(limit)
+    return [dict(row) for row in conn.execute(sql, params)]
 
 
 def update_user_contact(conn, user_id, email, phone=None):

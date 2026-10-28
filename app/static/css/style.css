@@ -230,6 +230,15 @@ img { max-width: 100%; display: block; }
 .glyphbtn:active { background: var(--soft); }
 
 .filters { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
+.chip-row { display: flex; gap: 8px; overflow-x: auto; padding: 2px 2px 14px; scrollbar-width: none; }
+.chip-row::-webkit-scrollbar { display: none; }
+.chip {
+  flex: none; border: 1px solid var(--line); background: var(--surface); color: var(--ink);
+  border-radius: 999px; padding: 8px 14px; font: inherit; font-size: 13px; font-weight: 700;
+  cursor: pointer; white-space: nowrap;
+}
+.chip.on { background: var(--primary); border-color: var(--primary); color: #fff; }
+.log-row .item-main { min-width: 0; }
 .select { position: relative; }
 .select select {
   appearance: none; -webkit-appearance: none; width: 100%; height: 50px;
@@ -568,6 +577,21 @@ form { margin: 0; }
 .account-card b { display: block; font-size: 18px; font-weight: 800; }
 .account-card span { display: block; color: var(--muted); font-size: 13.5px; margin-top: 1px; }
 .settings-sec { font-size: 13px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin: 24px 0 10px; }
+.staff-link {
+  display: flex; align-items: center; gap: 14px; width: 100%; text-align: left;
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 15px 17px; color: inherit; margin-bottom: 10px;
+}
+.staff-link:active { background: var(--soft); }
+.staff-link .item-main b { display: block; font-size: 16px; font-weight: 800; }
+.staff-link .item-main span { display: block; font-size: 13px; color: var(--muted); margin-top: 2px; line-height: 1.35; }
+.staff-link > .ic { flex: none; color: var(--muted); }
+.mini-avatar { width: 44px; height: 44px; border-radius: 50%; background: var(--soft); color: var(--primary); display: grid; place-items: center; flex: none; }
+.mini-avatar .ic { width: 21px; height: 21px; }
+.staff-row { display: flex; align-items: center; gap: 13px; padding: 13px 0; }
+.staff-row + .staff-row { border-top: 1px solid var(--line); }
+.staff-row .item-meta { margin-top: 3px; }
+.staff-row .pill { align-self: flex-start; }
 
 /* ---------- misc ---------- */
 .toast {

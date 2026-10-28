@@ -9,7 +9,7 @@ implementation for the Group 7 capstone design project.
 ```
 ADISMS/
 ├── run.py                     # start the web app (python run.py)
-├── start.bat                  # Windows one-click setup + start (+ --test, --cnn)
+├── start.bat                  # Windows one-click setup + start (+ --test, --cnn, --lan)
 ├── requirements.txt
 ├── .gitignore
 ├── app/
@@ -17,7 +17,7 @@ ADISMS/
 │   ├── config.py              # paths, thresholds, targets (env-overridable)
 │   ├── database.py            # SQLite schema + stock/ACID operations + reports
 │   ├── db_session.py          # one connection per request
-│   ├── auth.py                # sign-up, login, account settings, route guards
+│   ├── auth.py                # owner sign-up, login, settings, staff accounts, guards
 │   ├── api.py                 # JSON API (dashboard, products, sales, reports, recognition)
 │   ├── recognition/
 │   │   ├── __init__.py        # engine registry: template | orb | cnn | auto
@@ -31,7 +31,7 @@ ADISMS/
 │   └── static/
 │       ├── index.html
 │       ├── css/style.css      # cream/green mobile design system
-│       ├── js/app.js          # SPA: login, home, inventory, scan, cart, receipt, stock, delivery, register, sales, settings
+│       ├── js/app.js          # SPA: login, home, inventory, scan, cart, receipt, stock, delivery, register, sales, settings, staff, activity log
 │       └── img/store-shelves.jpg  # identify-screen backdrop
 ├── ml/
 │   ├── train_cnn.py           # train data/models/cnn.pt (PyTorch + torchvision)
@@ -43,7 +43,7 @@ ADISMS/
 │   ├── helpers.py             # synthetic images for deterministic tests
 │   ├── test_stock.py          # ACID stock updates + 100 random transactions
 │   ├── test_api.py            # API, uploads, recognition endpoint
-│   ├── test_auth.py           # sign-up, email login, settings, password change, migration
+│   ├── test_auth.py           # owner sign-up, login, settings, staff accounts, migration
 │   ├── test_cart_reports.py   # cart sales, delivery metadata, stock/report APIs, migration
 │   └── test_recognition.py    # engines + evaluation harness
 ├── data/
@@ -75,25 +75,42 @@ start.bat               :: set up if needed, start, open the browser
 start.bat --no-browser  :: start without opening the browser
 start.bat --cnn         :: also install PyTorch for recognition alternative C
 start.bat --test        :: run the test suite and exit
+start.bat --lan         :: also accept phones/tablets on the same Wi-Fi
 ```
 
-Open <http://127.0.0.1:5000>. Demo accounts (change before real use):
+Open <http://127.0.0.1:5000>. The app starts with **no accounts and no
+products**: the login page and the sign-up page ("Create the owner account")
+are both always available.
 
-| Username | Email | Password | Role |
-|---|---|---|---|
-| owner | owner@arviddrygoods.local | owner123 | Owner |
-| employee | employee@arviddrygoods.local | employee123 | Employee |
+**First run:** open the sign-up page, create the Owner account (username,
+email, optional phone, password), then you are returned to the login page and
+**sign in with those same credentials**. Sign-up does not start a session.
+Once an Owner exists, the sign-up endpoint refuses further registrations; all
+later accounts are created by the Owner from **Settings → Staff accounts**
+(Owner only). Choose a username, a valid email, an optional phone number, and
+an 8-character password. Employees can record sales and deliveries but cannot
+manage products, staff, or reports. You can log in with either the username or
+the email; email and phone can be changed later from **Settings**, which also
+lets the signed-in user change their password. Existing databases are upgraded
+in place: the `email`, `phone`, and `created_at` columns are added without
+deleting accounts.
 
-You can log in with either the username or the email. The **Create account**
-tab signs up a new Employee; it requires a username, a valid email, and an
-8-character password (phone is optional). Email and phone can be changed later
-from **Settings**, which also lets the signed-in user change their password.
-Existing databases are upgraded in place: the new `email`, `phone`, and
-`created_at` columns are added without deleting accounts.
+No accounts or products are seeded, so everything you see is data you entered.
+Databases created by older builds may still contain sample `owner`/`employee`
+accounts; they are not removed automatically — back up `adisms.db` and remove
+them if you want a clean start. The owner can review every sign-in, failed
+sign-in, sale, delivery, product change, and account change in
+**Settings → Activity log**, which is never shown to employees.
 
-The database is created and seeded automatically on first run. Set
-`ADISMS_SECRET_KEY` (and `ADISMS_DB`, `ADISMS_DATA_DIR` if needed) in the
-environment for anything beyond local testing.
+### Using it on phones and other devices
+
+The server binds to `127.0.0.1` (this PC only) by default. Start it with
+`start.bat --lan` or set `ADISMS_HOST=0.0.0.0` before `python run.py`, then open
+`http://<this-pc-ip>:5000` on the other device (same Wi-Fi network). Allow the
+Windows firewall prompt for private networks. `ADISMS_PORT` changes the port
+and `ADISMS_DEBUG=1` enables the Flask debugger. Set `ADISMS_SECRET_KEY` (and
+`ADISMS_DB`, `ADISMS_DATA_DIR` if needed) in the environment for anything
+beyond local testing — without a fixed key every restart invalidates sessions.
 
 ## Screens
 
@@ -102,7 +119,8 @@ The interface is a single-page mobile layout (max 440 px) with four bottom tabs
 
 | Screen | What it does |
 |---|---|
-| Sign in / Create account | username or email + password; sign-up requires username, email, password, optional phone |
+| Sign in | username/email + password; link to the sign-up page |
+| Owner sign-up | creates the lone Owner account, then returns to Sign in (no auto-login) |
 | Home | today's sales, transactions, items sold, product count, hourly chart, quick actions, stock attention |
 | Inventory | search by name/ID, stock filter, sort, product cards, Add product |
 | Product details | photo, price, stock, reorder level, stock-movement history, recognition-photo upload, Delete product (owner only) |
@@ -114,7 +132,9 @@ The interface is a single-page mobile layout (max 440 px) with four bottom tabs
 | Receive delivery | quantity, date received, delivery reference, stock-after preview |
 | Register product | photo, name, ID, price, initial stock, reorder level, barcode |
 | Daily sales | date navigation, totals, hourly chart, top products, recent sales |
-| Settings | email/phone, password change, log out |
+| Settings | email/phone, password change, Staff accounts and Activity log (owner only), log out |
+| Staff accounts | owner-only: list of accounts, create employee accounts, recent stock activity |
+| Activity log | owner-only audit trail of sign-ins, failed sign-ins, sales, deliveries, product changes and account changes |
 
 Identifying a product never changes stock: stock is deducted only when a sale
 is recorded and added only when a delivery is saved.
@@ -180,9 +200,12 @@ split, then document the final values and the measured accuracy/response time.
 
 | Method | Path | Purpose |
 |---|---|---|
-| POST | `/api/register` | create an Employee account and sign in |
+| POST | `/api/register` | first-run owner sign-up; does not sign in (refused once an Owner exists) |
+| GET | `/api/setup` | whether the Owner account still needs to be created |
 | POST | `/api/login`, `/api/logout` | session auth (username or email + password) |
 | GET | `/api/me` | current user |
+| GET/POST | `/api/staff` | staff accounts + recent stock activity / create an Employee (Owner only) |
+| GET | `/api/staff/logs?limit=100&action=` | Owner-only activity log (sign-ins, sales, deliveries, product/account changes) |
 | GET/PATCH | `/api/settings` | read / update email and phone |
 | POST | `/api/settings/password` | change password (requires current password) |
 | GET | `/api/dashboard` | sales today, 7-day chart, low-stock list |
@@ -208,8 +231,10 @@ python -m unittest discover -s tests -t .
 ```
 
 Covers stock arithmetic, negative-stock rejection, 100 random transactions
-against an expected ledger, registration/login/settings/password flows, the
-legacy-database migration, uploads, the recognition endpoint, engine
+against an expected ledger, owner sign-up and the single-owner rule,
+login/settings/password flows, owner-only staff creation and staff activity,
+the owner-only activity log (including failed sign-ins and employee denial),
+the legacy-database migration, uploads, the recognition endpoint, engine
 ranking/rejection, the evaluation harness, atomic multi-product cart sales,
 delivery date/reference validation, product stock movements, the stock and
 daily-report endpoints, and product deletion rules (Owner only, history
@@ -222,8 +247,8 @@ created after the columns exist.
 
 ## Notes before deployment
 
-- Change the seeded passwords and placeholder emails, and set a real
-  `ADISMS_SECRET_KEY`.
+- Set a real `ADISMS_SECRET_KEY`; the first sign-up creates the Owner account,
+  so do it before exposing the server to anyone else.
 - Serve over HTTPS if the phone and server are not on a trusted local network.
 - The barcode camera scanner uses the browser's `BarcodeDetector` (Chrome/Edge
   on Android and desktop). Typing the number always works as a fallback.

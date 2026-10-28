@@ -11,6 +11,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app import create_app
 from app import database as db
+from tests.helpers import seed_products
 
 
 class CartSaleTests(unittest.TestCase):
@@ -18,6 +19,8 @@ class CartSaleTests(unittest.TestCase):
         self.tmp = tempfile.mkdtemp()
         self.conn = db.connect(os.path.join(self.tmp, "cart.db"))
         db.init_db(self.conn)
+        seed_products(self.conn)
+        db.create_owner(self.conn, "tester", "tester@example.com", "password123")
 
     def tearDown(self):
         self.conn.close()
@@ -77,6 +80,7 @@ class DeliveryMetadataTests(unittest.TestCase):
         self.tmp = tempfile.mkdtemp()
         self.conn = db.connect(os.path.join(self.tmp, "delivery.db"))
         db.init_db(self.conn)
+        seed_products(self.conn)
 
     def tearDown(self):
         self.conn.close()
@@ -129,7 +133,7 @@ class OldSchemaMigrationTests(unittest.TestCase):
             INSERT INTO sales(product_id, quantity, unit_price, total, created_at)
                 VALUES ('P001', 2, 10, 20, '2026-01-02 09:00:00');
         """)
-        db.init_db(conn, seed=False)
+        db.init_db(conn)
         sale_columns = {row["name"] for row in conn.execute("PRAGMA table_info(sales)")}
         delivery_columns = {row["name"] for row in conn.execute("PRAGMA table_info(deliveries)")}
         user_columns = {row["name"] for row in conn.execute("PRAGMA table_info(users)")}
@@ -158,6 +162,10 @@ class NewApiTests(unittest.TestCase):
             "TESTING": True,
         })
         self.client = self.app.test_client()
+        seed_products(self.app.config["DB_PATH"])
+        self.client.post("/api/register", json={
+            "username": "owner", "email": "owner@example.com",
+            "password": "owner123", "confirm_password": "owner123"})
         self.client.post("/api/login", json={"username": "owner", "password": "owner123"})
 
     def tearDown(self):
@@ -239,6 +247,10 @@ class DeleteProductTests(unittest.TestCase):
             "TESTING": True,
         })
         self.client = self.app.test_client()
+        seed_products(self.app.config["DB_PATH"])
+        self.client.post("/api/register", json={
+            "username": "owner", "email": "owner@example.com",
+            "password": "owner123", "confirm_password": "owner123"})
         self.client.post("/api/login", json={"username": "owner", "password": "owner123"})
 
     def tearDown(self):
@@ -273,6 +285,9 @@ class DeleteProductTests(unittest.TestCase):
 
     def test_employee_cannot_delete(self):
         self._register()
+        self.client.post("/api/staff", json={
+            "username": "employee", "email": "employee@example.com",
+            "password": "employee123", "confirm_password": "employee123"})
         employee = self.app.test_client()
         employee.post("/api/login", json={
             "username": "employee", "password": "employee123"})
